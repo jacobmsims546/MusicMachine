@@ -1,0 +1,340 @@
+`timescale 1ns / 1ps
+module finalprojectcode1(
+    input clk, //input clk, 100 MHz
+    input [7:0] notesel, //8 switches to select note
+    input notein, //center button, add note to register
+    input reset, //next to last switch, reset
+    input manualplay, //down button, manual start
+    input flattoggle, //last switch, toggle flat
+    output notecolorred, //PWM of note selector LED red
+    output notecolorgreen, //PWM of note selector LED green
+    output notecolorblue, //PWM of note selector LED blue
+    output reg flatcolorgreen, //Flat toggle LED PWM
+    output sound, //PWM of audio
+    output reg soundenable, //PWM of audio enable
+    output reg [15:0] notereg //display for stored notes
+    );
+    
+    wire pulse; //5 MHz signal
+    reg currentfreqpulse;
+    reg twentycurrentfreqpulse;
+    reg twohundredcurrentfreqpulse;
+    reg halfsecpulse;
+    reg [15:0] freqcounter;
+    reg [15:0] twentyfreqcounter;
+    reg [15:0] twohundredfreqcounter;
+    reg [15:0] halfseccounter;
+    reg [3:0] counter_PWM;
+    reg [19:0] soundfreqtimestwenty;
+    reg [3:0] duty_cyclesound, duty_cyclered, duty_cyclegreen, duty_cycleblue;
+    reg duty_cyclesoundincdir;
+    reg [19:0] freqselect;
+    reg [19:0] f0, f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15;
+    reg [4:0] numinreg;
+    reg [4:0] currentplay;
+    reg [19:0] currentplayreg;
+    reg [19:0] freqs [13:0]; //frequency values in mHz
+    
+    initial begin
+        $readmemb("freq_rom.mem", freqs);
+        currentplay = 0;
+    end
+    
+    clk_wiz_0 a1 (.clk_in1(clk),.clk_out1(pulse));
+    
+    always @ (posedge reset or posedge notein) begin
+        if (reset) begin
+            f0 <= 0; f1 <= 0; f2 <= 0; f3 <= 0; f4 <= 0; f5 <= 0; f6 <= 0; f7 <= 0;
+            f8 <= 0; f9 <= 0; f10 <= 0; f11 <= 0; f12 <= 0; f13 <= 0; f14 <= 0; f15 <= 0;
+            numinreg <= 0;
+        end else begin
+                f15 = f14;
+                f14 = f13;
+                f13 = f12;
+                f11 = f10;
+                f10 = f9;
+                f9 = f8;
+                f8 = f7;
+                f7 = f6;
+                f6 = f5;
+                f5 = f4;
+                f4 = f3;
+                f3 = f2;
+                f2 = f1;
+                f1 = f0;
+                f0 = freqselect;
+                if (numinreg < 16) begin
+                    numinreg <= numinreg + 1;
+                    currentplay <= numinreg;
+                end
+        end
+    end
+    
+    always @ (posedge clk) begin
+        if (flattoggle) begin
+            flatcolorgreen <= pulse;
+        end else begin
+            flatcolorgreen <= 0;
+        end
+    end
+    
+    always @ (posedge clk) begin
+        freqcounter <= freqcounter + 1;
+        twentyfreqcounter <= twentyfreqcounter + 1;
+        twohundredfreqcounter <= twohundredfreqcounter + 1;
+        if (currentplayreg > 0) begin
+        if(freqcounter >= (currentplayreg / 500)) begin
+            currentfreqpulse <= ~currentfreqpulse;
+            freqcounter <= 0;
+        end
+        if(twentyfreqcounter >= (currentplayreg / 10000)) begin
+            twentycurrentfreqpulse <= ~twentycurrentfreqpulse;
+            twentyfreqcounter <= 0;
+        end
+        if(twohundredfreqcounter >= (currentplayreg / 100000)) begin
+            twohundredcurrentfreqpulse <= ~twohundredcurrentfreqpulse;
+            twohundredfreqcounter <= 0;
+        end
+        end
+    end
+    
+    always @ (posedge twentycurrentfreqpulse) begin
+        if (duty_cyclesoundincdir == 0) begin
+            if (duty_cyclesound == 10) begin
+                duty_cyclesoundincdir = 1;
+                duty_cyclesound = 10;
+            end else begin
+                duty_cyclesound = duty_cyclesound + 1;
+            end
+        end else begin
+            if (duty_cyclesound == 0) begin
+                duty_cyclesoundincdir = 0;
+                duty_cyclesound = 2;
+            end else begin
+                duty_cyclesound = duty_cyclesound - 1;
+            end
+        end
+    end
+    
+    always @ (posedge twohundredcurrentfreqpulse) begin
+        counter_PWM <= counter_PWM + 1;
+        if(counter_PWM > 9) begin
+            counter_PWM <= 0;
+        end
+    end
+    
+    assign sound = counter_PWM < duty_cyclesound ? 1:0;
+    
+    always @ (notesel or flattoggle) begin
+        if (notesel[0]) begin
+            duty_cyclered <= 9;
+            duty_cycleblue <= 0;
+            duty_cyclegreen <= 0;
+            if (flattoggle) begin
+                freqselect <= freqs[0]; //low F flat (low E)
+            end else begin
+                freqselect <= freqs[1]; //low F
+            end
+        end
+        if (notesel[1]) begin
+            duty_cyclered <= 9;
+            duty_cycleblue <= 0;
+            duty_cyclegreen <= 3;
+            if (flattoggle) begin
+                freqselect <= freqs[2]; //G flat
+            end else begin
+                freqselect <= freqs[3]; //G
+            end
+        end
+        if (notesel[2]) begin
+            duty_cyclered <= 9;
+            duty_cycleblue <= 0;
+            duty_cyclegreen <= 9;
+            if (flattoggle) begin
+                freqselect <= freqs[4]; //A flat
+            end else begin
+                freqselect <= freqs[5]; //A
+            end
+        end
+        if (notesel[3]) begin
+            duty_cyclered <= 0;
+            duty_cycleblue <= 0;
+            duty_cyclegreen <= 9;
+            if (flattoggle) begin
+                freqselect <= freqs[6]; //B flat
+            end else begin
+                freqselect <= freqs[7]; //B
+            end
+        end
+        if (notesel[4]) begin
+            duty_cyclered <= 0;
+            duty_cycleblue <= 9;
+            duty_cyclegreen <= 0;
+            if (flattoggle) begin
+                freqselect <= freqs[7]; //C flat (B)
+            end else begin
+                freqselect <= freqs[8]; //C
+            end
+        end
+        if (notesel[5]) begin
+            duty_cyclered <= 7;
+            duty_cycleblue <= 7;
+            duty_cyclegreen <= 2;
+            if (flattoggle) begin
+                freqselect <= freqs[9]; //D flat
+            end else begin
+                freqselect <= freqs[10]; //D
+            end
+        end
+        if (notesel[6]) begin
+            duty_cyclered <= 8;
+            duty_cycleblue <= 8;
+            duty_cyclegreen <= 4;
+            if (flattoggle) begin
+                freqselect <= freqs[11]; //E flat
+            end else begin
+                freqselect <= freqs[12]; //E
+            end
+        end
+        if (notesel[7]) begin
+            duty_cyclered <= 9;
+            duty_cycleblue <= 0;
+            duty_cyclegreen <= 0;
+            if (flattoggle) begin
+                freqselect <= freqs[12]; //F flat (E)
+            end else begin
+                freqselect <= freqs[13]; //F
+            end
+        end
+        if (notesel == 0) begin
+            duty_cyclered <= 0;
+            duty_cycleblue <= 0;
+            duty_cyclegreen <= 0;
+        end
+    end
+     
+    assign notecolorred = counter_PWM < duty_cyclered ? 1:0;
+    assign notecolorgreen = counter_PWM < duty_cyclegreen ? 1:0;
+    assign notecolorblue = counter_PWM < duty_cycleblue ? 1:0;
+     
+    always @ (manualplay) begin
+        if (manualplay) begin
+            soundenable <= pulse;
+        end else begin
+            soundenable <= 0;
+            currentplay <= currentplay - 1;
+                if (currentplay < 0) begin
+                    currentplay <= 0;
+                end
+        end
+    end
+    
+    always @ (currentplay) begin
+        case(currentplay)
+            0: begin
+                currentplayreg <= f0;
+               end
+            1: begin
+                currentplayreg <= f1;
+               end
+            2: begin
+                currentplayreg <= f2;
+               end
+            3: begin
+                currentplayreg <= f3;
+               end
+            4: begin
+                currentplayreg <= f4;
+               end
+            5: begin
+                currentplayreg <= f5;
+               end
+            6: begin
+                currentplayreg <= f6;
+               end
+            7: begin
+                currentplayreg <= f7;
+               end
+            8: begin
+                currentplayreg <= f8;
+               end
+            9: begin
+                currentplayreg <= f9;
+               end
+            10: begin
+                currentplayreg <= f10;
+               end
+            11: begin
+                currentplayreg <= f11;
+               end
+            12: begin
+                currentplayreg <= f12;
+               end
+            13: begin
+                currentplayreg <= f13;
+               end
+            14: begin
+                currentplayreg <= f14;
+               end
+            15: begin
+                currentplayreg <= f15;
+               end
+            endcase
+        end  
+        
+    always @ (numinreg) begin
+        case(numinreg)
+            0: begin 
+                notereg <= 0;
+               end
+            1: begin
+                notereg <= 16'b0000000000000001;
+               end
+            2: begin
+                notereg <= 16'b0000000000000011;
+               end
+            3: begin
+                notereg <= 16'b0000000000000111;
+               end
+            4: begin
+                notereg <= 16'b0000000000001111;
+               end
+            5: begin
+                notereg <= 16'b0000000000011111;
+               end
+            6: begin
+                notereg <= 16'b0000000000111111;
+               end
+            7: begin
+                notereg <= 16'b0000000001111111;
+               end
+            8: begin
+                notereg <= 16'b0000000011111111;
+               end
+            9: begin
+                notereg <= 16'b0000000111111111;
+               end
+            10: begin
+                notereg <= 16'b0000001111111111;
+                end
+            11: begin
+                notereg <= 16'b0000011111111111;
+                end
+            12: begin
+                notereg <= 16'b0000111111111111;
+                end
+            13: begin
+                notereg <= 16'b0001111111111111;
+                end
+            14: begin
+                notereg <= 16'b0011111111111111;
+                end
+            15: begin
+                notereg <= 16'b0111111111111111;
+                end
+            16: begin
+                notereg <= 16'b1111111111111111;
+                end
+            endcase
+         end
+endmodule
